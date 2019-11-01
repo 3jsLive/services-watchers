@@ -1,0 +1,44 @@
+{
+	"name": "services-watchers",
+	"version": "0.8.0",
+	"description": "ci.3js.dev service workers: watcher",
+	"main": "index.js",
+	"scripts": {
+		"test": "mocha tests/"
+	},
+	"repository": {
+		"type": "git",
+		"url": "todo"
+	},
+	"eslintConfig": {
+		"extends": "mdcs",
+		"parserOptions": {
+			"ecmaVersion": 2018,
+			"ecmaFeatures": {
+				"impliedStrict": true
+			}
+		},
+		"env": {
+			"node": true,
+			"mocha": true
+		}
+	},
+	"author": "3botjs",
+	"license": "ISC",
+	"dependencies": {
+		"better-sqlite3": "^5.4.3",
+		"bluebird": "^3.7.1",
+		"execasync": "file:../local_modules/execasync",
+		"flat-cache": "^2.0.1",
+		"proper-lockfile": "^4.1.1",
+		"rc": "^1.2.8",
+		"request": "^2.88.0",
+		"signale": "^1.4.0"
+	},
+	"devDependencies": {
+		"@types/bluebird": "^3.5.28",
+		"eslint": "^6.5.1",
+		"eslint-config-mdcs": "^4.2.3",
+		"mocha": "^6.2.2"
+	}
+}
