@@ -72,13 +72,10 @@ function statusCallback( scope ) {
 
 class BaseWatcher {
 
-	constructor( { name, /* pollingFn, moduleName, */ url, options, cache, filterFn, keyFn, workers } ) {
+	constructor( { name, url, options, cache, filterFn, keyFn, workers } ) {
 
 		if ( ! name )
 			throw new Error( 'Watcher needs a name' );
-
-		// if ( ! moduleName && ! pollingFn )
-		// 	throw new Error( `Watcher '${name}' needs either a module to load or a polling function to call` );
 
 		if ( ! url )
 			throw new Error( `Watcher '${name}' needs an URL to poll` );
@@ -93,16 +90,10 @@ class BaseWatcher {
 			throw new Error( `Watcher '${name}' needs workers` );
 
 		this.name = name;
-		// this.moduleName = moduleName;
 		this.url = url;
 		this.filterFn = filterFn;
 		this.keyFn = keyFn;
 		this.workers = workers;
-
-		// if ( ! pollingFn )
-		// 	this.pollingFn = require( moduleName );
-		// else
-		// 	this.pollingFn = pollingFn;
 
 		if ( ! cache )
 			this.cache = flatCache.load( `${name}Watcher`, config.CACHE_DIR );
