@@ -1,6 +1,5 @@
 const Promise = require( 'bluebird' );
 const request = Promise.promisify( require( 'request' ) );
-const poll = require( "./poll" );
 const signale = require( "signale" );
 const flatCache = require( 'flat-cache' );
 
@@ -69,6 +68,27 @@ function statusCallback( scope ) {
 	};
 
 }
+
+
+function pollAsync( func, delay = 0, timeout = 30000 ) {
+
+	const fullfilled = () => {
+
+		return Promise
+			.delay( delay )
+			.then( () => pollAsync( func, delay ) )
+			.timeout( timeout )
+			.catch( Promise.TimeoutError, () => console.log( 'pollAsync timed out' ) )
+			.catch( err => console.error( 'Something went wrong during polling:', err ) );
+
+	};
+
+	func()
+		.then( fullfilled )
+		.catch( fullfilled );
+
+}
+
 
 class BaseWatcher {
 
@@ -218,22 +238,22 @@ class BaseWatcher {
 // keeping the PR database up to date and that's about it
 const pullrequests = require( './watchers/pullrequests' );
 const pullrequestsWatcher = new BaseWatcher( pullrequests );
-poll( pullrequestsWatcher.polling( statusCallback( pullrequests.name ) ), 5000 );
+pollAsync( pullrequestsWatcher.polling( statusCallback( pullrequests.name ) ), 5000 );
 
 // keeps our mirror of github meta stuff (issues, milestones, ...)
 // current, mostly for statistics in 3ci
 const events = require( './watchers/events' );
 const eventsWatcher = new BaseWatcher( events );
-poll( eventsWatcher.polling( statusCallback( events.name ) ), 5000 );
+pollAsync( eventsWatcher.polling( statusCallback( events.name ) ), 5000 );
 
 // only processes milestone/demilestone events because /watchers/events doesn't get that
 const milestoner = require( './watchers/issues-events' );
 const milestonerWatcher = new BaseWatcher( milestoner );
-poll( milestonerWatcher.polling( statusCallback( milestoner.name ) ), 5000 );
+pollAsync( milestonerWatcher.polling( statusCallback( milestoner.name ) ), 5000 );
 
 // keep our fork's branches in sync with upstreams and split up
 // any multi-commit push into individual pushes so CI gets triggered
 // on all of them
 const branch = require( './watchers/branch' );
 const branchWatcher = new BaseWatcher( branch );
-poll( branchWatcher.polling( statusCallback( branch.name ) ), 5000 );
+pollAsync( branchWatcher.polling( statusCallback( branch.name ) ), 5000 );
