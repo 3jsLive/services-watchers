@@ -1,128 +1,120 @@
 const Promise = require( 'bluebird' );
-const path = require( 'path' );
 const lockfile = require( 'proper-lockfile' );
-const execAsync = require( 'execasync' );
+const BaseWatcher = require( '../BaseWatcher' );
 
-/* const BaseWatcher = require( '../BaseWatcher' );
 
-class BranchWatcher extends BaseWatcher {
-
-	constructor( name, url, options, filterFn, keyFn, workers )
-} */
 const config = {
 	'REPOSITORY': 'mrdoob/three.js',
 	'LOCAL_REMOTE': '3jslive', // moraxy
 	'REMOTE_REMOTE': 'mrdoob',
 	'IDENTITY_FILE': '/home/max/.ssh/id_rsa.5',
-	'GIT_EMAIL': '54175649+3jsLive@users.noreply.github.com',
-	'GIT_NAME': '3jsLive'
+	'LOCAL_REPO': '/home/max/dev/3js.dev/data/3jsRepository/.git'
 };
 
 
-const shellOptions = {
-	cwd: '/home/max/dev/3js.dev/data/3jsRepository/',
-	env: process.env,
-	timeout: 60000,
-	encoding: 'utf8'
-};
+class BranchWatcher extends BaseWatcher {
 
+	constructor() {
 
-function keyFn( data ) {
+		super( 'branchMirror', `/repos/${config.REPOSITORY}/branches` );
 
-	return data.sha;
+		this.workers = [ { name: 'processUpdate', fn: this.processUpdate } ];
 
-}
+	}
 
+	keyFn( data ) {
 
-function filterFn( branch ) {
+		return data.sha;
 
-	return {
-		name: branch.name,
-		sha: branch.commit.sha
-	};
+	}
 
-}
+	filterFn( branch ) {
 
+		return {
+			name: branch.name,
+			sha: branch.commit.sha
+		};
 
-function processUpdate( /* branch */ ) {
+	}
 
-	let release;
+	processUpdate( /* branch */ ) {
 
-	// lockfile.lockSync( path.join( shellOptions.cwd, '.git' ), { stale: 600000 } );
-	return lockfile.lock( path.join( shellOptions.cwd, '.git' ), { stale: 600000 } )
-		.then( r => {
+		let release;
 
-			release = r;
+		return lockfile.lock( config.LOCAL_REPO, { stale: 600000, update: 30000, retries: 3 } )
+			.then( r => {
 
-			return execAsync( `git fetch --all`, shellOptions );
+				release = r;
 
-		} )
-		.then( fetch => {
+				return BaseWatcher.exec( `git fetch --all` );
 
-			console.log( fetch.code, fetch.stdout, fetch.stdout );
+			} )
+			.then( fetch => {
 
-			return execAsync( `git pull ${config.REMOTE_REMOTE} dev`, shellOptions );
+				console.log( fetch.code, fetch.stdout, fetch.stdout );
 
-		} )
-		.then( pull => {
+				return BaseWatcher.exec( `git pull ${config.REMOTE_REMOTE} dev` );
 
-			console.log( pull.code, pull.stdout, pull.stderr );
+			} )
+			.then( pull => {
 
-			// --ancestry-path
-			return execAsync( `git rev-list --reverse ${config.LOCAL_REMOTE}/dev..${config.REMOTE_REMOTE}/dev`, shellOptions );
+				console.log( pull.code, pull.stdout, pull.stderr );
 
-		} )
-		.then( revlist => {
+				// --ancestry-path
+				return BaseWatcher.exec( `git rev-list --reverse ${config.LOCAL_REMOTE}/dev..${config.REMOTE_REMOTE}/dev` );
 
-			console.log( revlist.code, revlist.stdout, revlist.stderr );
+			} )
+			.then( revlist => {
 
-			return Promise.mapSeries( revlist.stdout.trim().split( /\n/g ), ( line, idx, arrLen ) => {
+				console.log( revlist.code, revlist.stdout, revlist.stderr );
 
-				const counter = `${idx}/${arrLen}`;
+				return Promise.mapSeries( revlist.stdout.trim().split( /\n/g ), ( line, idx, arrLen ) => {
 
-				if ( /^[a-f0-9]{40}$/i.test( line ) !== true ) {
+					const counter = `${idx}/${arrLen}`;
 
-					console.log( `${counter}: Not a valid SHA '${line}'` );
-					return;
+					if ( /^[a-f0-9]{40}$/i.test( line ) !== true ) {
 
-				}
+						console.log( `${counter}: Not a valid SHA '${line}'` );
+						return;
 
-				return execAsync( `GIT_SSH_COMMAND="ssh -i ${config.IDENTITY_FILE}" git -c user.email='${config.GIT_EMAIL}' -c user.name='${config.GIT_NAME}' push --force --verbose ${config.LOCAL_REMOTE} ${line}:dev`, shellOptions )
-					.then( push => {
+					}
 
-						console.log( `${counter}`, push.code, push.stdout, push.stderr );
+					return BaseWatcher.exec( `GIT_SSH_COMMAND="ssh -i ${config.IDENTITY_FILE}" git push --force --verbose ${config.LOCAL_REMOTE} ${line}:dev` )
+						.then( push => {
 
-						return push;
+							console.log( `${counter}`, push.code, push.stdout, push.stderr );
 
-					} )
-					.catch( err => console.error( err ) );
+							return push;
+
+						} )
+						.catch( err => console.error( err ) );
+
+				} );
+
+			} )
+			.then( results => {
+
+				console.log( 'Push results:', results );
+
+				return release()
+					.then( () => results.filter( r => r.code === 0 ).length );
+
+			} )
+			.catch( err => {
+
+				console.error( 'Branch worker failure:', err );
+
+				return release();
 
 			} );
 
-		} )
-		.then( results => {
-
-			console.log( 'Push results:', results );
-
-			return release()
-				.then( () => results.filter( r => r.code === 0 ).length );
-
-		} )
-		.catch( err => {
-
-			console.error( 'Branch worker failure:', err );
-
-			return release();
-
-		} );
+	}
 
 }
 
+// keep our fork's branches in sync with upstreams and split up
+// any multi-commit push into individual pushes so CI gets triggered
+// on all of them
+// BaseWatcher.pollAsync( new BranchWatcher().polling(), 5000 );
 
-module.exports = {
-	keyFn,
-	filterFn,
-	url: `/repos/${config.REPOSITORY}/branches`,
-	name: 'branchMirror',
-	workers: [ { name: 'processUpdate', fn: processUpdate } ]
-};
+module.exports = BranchWatcher;
