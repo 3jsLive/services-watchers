@@ -114,7 +114,7 @@ class EventsWatcher extends BaseWatcher {
 	processEvent( event ) {
 
 		let result = 0;
-		console.log( '%o | %o', this.handlers, event );
+
 		if ( typeof this.handlers[ event.type ] !== 'undefined' ) {
 
 			this.sql.actor.insert.run( event.actor );

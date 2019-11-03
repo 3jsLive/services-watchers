@@ -81,13 +81,14 @@ class BaseWatcher {
 		this.name = name;
 		this.url = url;
 		// this.workers = workers;
+		/**
+		 * @type {{name: string, fn: Function}[]}
+		 */
 		this.workers = [];
 
 		this.cache = flatCache.load( `${this.name}Watcher`, config.CACHE_DIR );
 		this.options = { state: "all", sort: "updated", direction: "desc" };
 
-		BaseWatcher.boredomDuration = 90;
-		BaseWatcher.boredomTimer = setInterval( BaseWatcher.boredomFunc, BaseWatcher.boredomDuration * 1000 );
 
 	}
 
@@ -175,7 +176,7 @@ class BaseWatcher {
 
 						// call all workers in series and format their return values
 						// comments: 0	foo: 3	etc...
-						return Promise.mapSeries( this.workers, worker => worker.fn( data, this.cache ) )
+						return Promise.mapSeries( this.workers, worker => worker.fn.call( this, data, this.cache ) )
 							.then( results => results.reduce( ( all, counter, idx ) => all += `${this.workers[ idx ].name}: ${counter}\t`, `${key} > ` ) );
 
 					}
@@ -283,6 +284,9 @@ class BaseWatcher {
 }
 
 module.exports = BaseWatcher;
+
+BaseWatcher.boredomDuration = 90;
+BaseWatcher.boredomTimer = setInterval( BaseWatcher.boredomFunc, BaseWatcher.boredomDuration * 1000 );
 
 // pullrequests watcher is the small-scale watcher behind 3jslive
 // keeping the PR database up to date and that's about it
