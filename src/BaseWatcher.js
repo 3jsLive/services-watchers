@@ -162,11 +162,6 @@ class BaseWatcher {
 						else
 							logger.debug( `No relevant updates detected` );
 
-						// if ( updatesComments > 0 )
-						// 	callback( updatesComments );
-						// else
-						// 	callback( 'no relevant updates' );
-
 						return updates;
 
 					} )
