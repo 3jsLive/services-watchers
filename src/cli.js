@@ -7,7 +7,7 @@ const statusLogger = signale.scope( 'Runner' );
 
 
 const boredomDuration = 90;
-const boredomTimer = setInterval( boredomFunc, boredomDuration * 1000 );
+let boredomTimer = setInterval( boredomFunc, boredomDuration * 1000 );
 
 function boredomFunc() {
 
