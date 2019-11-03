@@ -5,7 +5,7 @@ const config = {
 	'REPOSITORY': 'mrdoob/three.js',
 	'GITHUB_TOKEN': process.env.GITHUB_TOKEN,
 	'USER_AGENT': '@3botjs',
-	'DATABASE': '/home/max/dev/3jsservices-single/watchers/eventslog.db'
+	'DATABASE': '/home/max/dev/3js.dev/data/watchers/eventslog.db'
 };
 
 
