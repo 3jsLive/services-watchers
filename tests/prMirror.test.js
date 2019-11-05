@@ -17,27 +17,33 @@ const pr = {
 
 const execReturns_PrUpdate_DoesNotExistOnRemote_Success = {
 	'fetch': { code: 0, stdout: '', stderr: '' },
-	'checkout': { code: 1, stdout: '', stderr: `fatal: Branch 'pr/${pr.id}' already exists.` },
+	'checkout': [
+		{ code: 128, stdout: '', stderr: `fatal: Branch 'pr/${pr.id}' already exists.` },
+		{ code: 0, stdout: '', stderr: `` }
+	],
 	'ls-remote': { code: 0, stdout: '', stderr: '' },
-	'show-branch': { code: 0, stdout: 'd1813701bd93511f217aa3d77203e0ec8e1e0101\n', stderr: '' }, // test with no reply as well
+	'show-branch': { code: 0, stdout: 'd1813701bd93511f217aa3d77203e0ec8e1e0101\n', stderr: '' },
 	'rev-list': {
 		code: 0,
 		stdout: '5a519912e4f4392b5b720c34535edaf325b766c5\ne7155f214f5006dd34addee79db2c8e32e00616b\n',
 		stderr: ''
 	},
-	'push': { code: 0, stdout: '', stderr: '' } // might fail
+	'push': { code: 0, stdout: '', stderr: '' }
 };
 
 const execReturns_PrUpdate_DoesExistOnRemote_Success = {
 	'fetch': { code: 0, stdout: '', stderr: '' },
-	'checkout': { code: 1, stdout: '', stderr: `fatal: Branch 'pr/${pr.id}' already exists.` },
+	'checkout': [
+		{ code: 128, stdout: '', stderr: `fatal: Branch 'pr/${pr.id}' already exists.` },
+		{ code: 0, stdout: '', stderr: `` }
+	],
 	'ls-remote': { code: 0, stdout: '68d6831fab24f94cd5fd3cef028c18ef6099b55b\trefs/heads/pr/12345\n', stderr: '' },
 	'rev-list': {
 		code: 0,
 		stdout: 'd1813701bd93511f217aa3d77203e0ec8e1e0101\n5a519912e4f4392b5b720c34535edaf325b766c5\ne7155f214f5006dd34addee79db2c8e32e00616b\n',
 		stderr: ''
 	},
-	'push': { code: 0, stdout: '', stderr: '' } // might fail
+	'push': { code: 0, stdout: '', stderr: '' }
 };
 
 const execReturns_PrNew_DoesNotExistOnRemote_Success = {
@@ -54,67 +60,134 @@ const execReturns_PrNew_DoesNotExistOnRemote_Success = {
 };
 
 
-function rewireExec( responses ) {
-
-	// take the git subcommand and reply with the stored ExecReturns
-	BaseWatcher.exec = ( command ) => {
-
-		const split = command.split( / /g );
-		const subCommandIndex = split.findIndex( s => s === 'git' ) + 1;
-		const subCommand = split[ subCommandIndex ];
-
-		const reply = responses[ subCommand ];
-
-		// console.log( `Intercepted '%s' => '%s' and replying with '%o'`, command, subCommand, reply );
-
-		return Promise.resolve( reply );
-
-	};
-
-}
-
 
 describe( `pullrequestsMirrorWatcher`, function () {
 
 	const watcher = new watcherClass();
 
-	before( 'rig cache', function () {
+	const rewireExec = ( responses ) => {
+
+		let responsesCopy = JSON.parse( JSON.stringify( responses ) );
+
+		// take the git subcommand and reply with the stored ExecReturns
+		watcher.exec = ( command ) => {
+
+			const split = command.split( / /g );
+			const subCommandIndex = split.findIndex( s => s === 'git' ) + 1;
+			const subCommand = split[ subCommandIndex ];
+
+			const reply = ( Array.isArray( responsesCopy[ subCommand ] ) === true ) ? responsesCopy[ subCommand ].shift() : responsesCopy[ subCommand ];
+
+			// console.log( `Intercepted '%s' => '%s' and replying with '%o'`, command, subCommand, reply );
+
+			if ( reply.code !== 0 )
+				return Promise.reject( reply );
+			else
+				return Promise.resolve( reply );
+
+		};
+
+	};
+
+
+	before( 'rig cache: always miss', function () {
 
 		watcher.cache = {
-			getKey: () => false, // TODO: also true
+			getKey: () => false,
 			save: () => true,
 			setKey: () => true
 		};
 
 	} );
 
-	it( 'successful worker run: PR update, not yet on remote', function ( done ) {
+	describe( 'locking always successful', function () {
 
-		rewireExec( execReturns_PrUpdate_DoesNotExistOnRemote_Success );
+		before( 'rig locking: always works', function () {
 
-		watcher.processCommits( pr )
-			.then( result => assert.equal( result, 2 ) )
-			.then( () => done() );
+			BaseWatcher.lockRepository = () => Promise.resolve( true );
+			BaseWatcher.unlockRepository = () => Promise.resolve( true );
+
+		} );
+
+		it( 'successful worker run: PR update, not yet on remote', function ( done ) {
+
+			rewireExec( execReturns_PrUpdate_DoesNotExistOnRemote_Success );
+
+			watcher.processCommits( pr )
+				.then( result => assert.equal( result, 2 ) )
+				.then( () => done() );
+
+		} );
+
+		it( 'successful worker run: PR update, already on remote', function ( done ) {
+
+			rewireExec( execReturns_PrUpdate_DoesExistOnRemote_Success );
+
+			watcher.processCommits( pr )
+				.then( result => assert.equal( result, 3 ) )
+				.then( () => done() );
+
+		} );
+
+		it( 'successful worker run: PR new, not yet on remote', function ( done ) {
+
+			rewireExec( execReturns_PrNew_DoesNotExistOnRemote_Success );
+
+			watcher.processCommits( pr )
+				.then( result => assert.equal( result, 2 ) )
+				.then( () => done() );
+
+		} );
 
 	} );
 
-	it( 'successful worker run: PR update, already on remote', function ( done ) {
+	describe( 'locking always fails', function () {
 
-		rewireExec( execReturns_PrUpdate_DoesExistOnRemote_Success );
+		before( 'rig locking: always fails', function () {
 
-		watcher.processCommits( pr )
-			.then( result => assert.equal( result, 3 ) )
-			.then( () => done() );
+			BaseWatcher.lockRepository = () => {
 
-	} );
+				return Promise.reject( { code: 128, stdout: '', stderr: `locking failed` } );
 
-	it( 'successful worker run: PR new, not yet on remote', function ( done ) {
+			};
 
-		rewireExec( execReturns_PrNew_DoesNotExistOnRemote_Success );
+			BaseWatcher.unlockRepository = () => {
 
-		watcher.processCommits( pr )
-			.then( result => assert.equal( result, 2 ) )
-			.then( () => done() );
+				return Promise.resolve( false );
+
+			};
+
+		} );
+
+		it( 'successful worker run: PR update, not yet on remote', function ( done ) {
+
+			rewireExec( execReturns_PrUpdate_DoesNotExistOnRemote_Success );
+
+			watcher.processCommits( pr )
+				.then( result => assert.equal( result, 2 ) )
+				.then( () => done() );
+
+		} );
+
+		it( 'successful worker run: PR update, already on remote', function ( done ) {
+
+			rewireExec( execReturns_PrUpdate_DoesExistOnRemote_Success );
+
+			watcher.processCommits( pr )
+				.then( result => assert.equal( result, 3 ) )
+				.then( () => done() );
+
+		} );
+
+		it( 'successful worker run: PR new, not yet on remote', function ( done ) {
+
+			rewireExec( execReturns_PrNew_DoesNotExistOnRemote_Success );
+
+			watcher.processCommits( pr )
+				.then( result => assert.equal( result, 2 ) )
+				.then( () => done() );
+
+		} );
 
 	} );
 

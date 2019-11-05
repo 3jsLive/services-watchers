@@ -25,32 +25,44 @@ const execReturnsSuccess = {
 
 describe( `branchMirrorWatcher`, function () {
 
-	this.statuses = [];
-	this.fakeCallback = ( message ) => this.statuses.push( message );
+	const watcher = new watcherClass();
 
-	before( 'rig execAsync', function () {
+	const rewireExec = ( responses ) => {
+
+		let responsesCopy = JSON.parse( JSON.stringify( responses ) );
 
 		// take the git subcommand and reply with the stored ExecReturns
-		BaseWatcher.exec = ( command ) => {
+		watcher.exec = ( command ) => {
 
 			const split = command.split( / /g );
 			const subCommandIndex = split.findIndex( s => s === 'git' ) + 1;
 			const subCommand = split[ subCommandIndex ];
 
-			const reply = execReturnsSuccess[ subCommand ];
+			const reply = ( Array.isArray( responsesCopy[ subCommand ] ) === true ) ? responsesCopy[ subCommand ].shift() : responsesCopy[ subCommand ];
 
 			// console.log( `Intercepted '%s' => '%s' and replying with '%o'`, command, subCommand, reply );
 
-			return Promise.resolve( reply );
+			if ( reply.code !== 0 )
+				return Promise.reject( reply );
+			else
+				return Promise.resolve( reply );
 
 		};
+
+	};
+
+	before( 'rig locking: always works', function () {
+
+		BaseWatcher.lockRepository = () => Promise.resolve( true );
+		BaseWatcher.unlockRepository = () => Promise.resolve( true );
 
 	} );
 
 	it( 'successful worker run: 3 branch updates', function ( done ) {
 
+		rewireExec( execReturnsSuccess );
+
 		// analyze
-		const watcher = new watcherClass();
 		watcher.processUpdate()
 			.then( result => assert.equal( result, 3 /* execReturnsSuccess.revlist.stdout.trim().split( '/\n/g' ).length */ ) )
 			.then( () => done() );
