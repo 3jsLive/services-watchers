@@ -18,7 +18,7 @@ function boredomFunc() {
 
 function statusCallback( scope ) {
 
-	const logger = signale.scope( scope );
+	const logger = signale.scope( scope, 'StatusCallback' );
 
 	return function ( status ) {
 

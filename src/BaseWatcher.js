@@ -3,17 +3,13 @@ const request = Promise.promisify( require( 'request' ) );
 const signale = require( 'signale' );
 const flatCache = require( 'flat-cache' );
 const execAsync = require( 'execasync' );
+const path = require( 'path' );
+const config = require( 'rc' )( '3jsdev' );
+const lockfile = require( 'proper-lockfile' );
 
 
 signale.config( { displayTimestamp: true } );
 
-
-const config = {
-	'REPOSITORY': 'mrdoob/three.js',
-	'GITHUB_TOKEN': process.env.GITHUB_TOKEN,
-	'USER_AGENT': '@3botjs',
-	'CACHE_DIR': '/home/max/dev/3js.dev/cache/watchers'
-};
 
 const githubApiRequest = request.defaults( {
 	baseUrl: 'https://api.github.com',
@@ -21,14 +17,14 @@ const githubApiRequest = request.defaults( {
 		'per_page': 100
 	},
 	headers: {
-		'User-Agent': config.USER_AGENT,
-		'Authorization': `token ${config.GITHUB_TOKEN}`
+		'User-Agent': config.watchers.userAgent,
+		'Authorization': `token ${process.env.GITHUB_TOKEN}`
 	},
 	timeout: 15000
 } );
 
 const shellOptions = {
-	cwd: '/home/max/dev/3js.dev/data/3jsRepository/',
+	cwd: path.join( config.root, config.threejsRepository ),
 	env: process.env,
 	timeout: 60000,
 	encoding: 'utf8'
@@ -36,6 +32,9 @@ const shellOptions = {
 
 
 class BaseWatcher {
+
+	static release = null;
+
 
 	constructor( name, url ) {
 
@@ -56,9 +55,10 @@ class BaseWatcher {
 		 */
 		this.workers = [];
 
-		this.cache = flatCache.load( `${this.name}Watcher`, config.CACHE_DIR );
+		this.cache = flatCache.load( `${this.name}Watcher`, path.join( config.root, config.watchers.cacheDir ) );
 		this.options = { state: "all", sort: "updated", direction: "desc" };
 
+		this.logger = signale.scope( this.name );
 
 	}
 
@@ -76,13 +76,13 @@ class BaseWatcher {
 
 	polling( callback ) {
 
-		const logger = signale.scope( `${this.name}Polling` );
+		this.logger = signale.scope( this.name, 'Polling' );
 
 		var etag = ( this.cache.getKey( 'etag' ) || { etag: 0 } ).etag;
-		logger.debug( 'etag', etag );
+		this.logger.debug( 'etag', etag );
 
 		if ( ! callback )
-			callback = logger.debug;
+			callback = this.logger.debug;
 
 		return async () => {
 
@@ -103,7 +103,7 @@ class BaseWatcher {
 
 			} catch ( err ) {
 
-				logger.error( `Request error: ${err}` );
+				this.logger.error( `Request error: ${err}` );
 
 				callback( err );
 
@@ -158,14 +158,14 @@ class BaseWatcher {
 					.then( updates => {
 
 						if ( updates.length > 0 )
-							logger.debug( `Updates:\n${updates}` );
+							this.logger.debug( `Updates:\n${updates}` );
 						else
-							logger.debug( `No relevant updates detected` );
+							this.logger.debug( `No relevant updates detected` );
 
 						return updates;
 
 					} )
-					.catch( err => logger.error( 'Body check failed:', err ) );
+					.catch( err => this.logger.error( 'Body check failed:', err ) );
 
 			} else {
 
@@ -173,16 +173,66 @@ class BaseWatcher {
 
 			}
 
-		};
+		}
 
 	}
 
 
-	static exec( command, additionalOptions ) {
+	exec( command, additionalOptions ) {
 
 		const options = { ...shellOptions, additionalOptions };
 
 		return execAsync( command, options );
+
+	}
+
+
+	static lockRepository( repoPath = path.join( config.root, config.threejsRepository, '.git' ), stale = 600000, update = 30000, retries = 3 ) {
+
+		// TODO: lockfile.check maybe better?
+		if ( BaseWatcher.release === null ) {
+
+			return lockfile.lock( repoPath, { stale: 600000, retries: { retries: 4, minTimeout: 30000, maxTimeout: 600000 } } )
+				.then( release => {
+
+					BaseWatcher.release = release;
+
+					return Promise.resolve( true );
+
+				} )
+				.catch( err => {
+
+					console.error( 'Locking failed:', err );
+
+					return Promise.resolve( false );
+
+				} );
+
+		}
+
+		return Promise.resolve( false );
+
+	}
+
+
+	static unlockRepository() {
+
+		// blind hope.
+		return BaseWatcher.release()
+			.then( () => {
+
+				BaseWatcher.release = null;
+
+				return Promise.resolve( true );
+
+			} )
+			.catch( err => {
+
+				console.error( 'Unlocking failed:', err );
+
+				return Promise.resolve( false );
+
+			} );
 
 	}
 

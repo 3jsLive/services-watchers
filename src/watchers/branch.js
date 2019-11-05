@@ -1,22 +1,13 @@
 const Promise = require( 'bluebird' );
-const lockfile = require( 'proper-lockfile' );
 const BaseWatcher = require( '../BaseWatcher' );
-
-
-const config = {
-	'REPOSITORY': 'mrdoob/three.js',
-	'LOCAL_REMOTE': '3jslive', // moraxy
-	'REMOTE_REMOTE': 'mrdoob',
-	'IDENTITY_FILE': '/home/max/.ssh/id_rsa.5',
-	'LOCAL_REPO': '/home/max/dev/3js.dev/data/3jsRepository/.git'
-};
+const config = require( 'rc' )( '3jsdev' );
 
 
 class BranchWatcher extends BaseWatcher {
 
 	constructor() {
 
-		super( 'branchMirror', `/repos/${config.REPOSITORY}/branches` );
+		super( 'branchMirror', `/repos/${config.upstreamGithubPath}/branches` );
 
 		this.workers = [ { name: 'processUpdate', fn: this.processUpdate } ];
 
@@ -39,34 +30,30 @@ class BranchWatcher extends BaseWatcher {
 
 	processUpdate( /* branch */ ) {
 
-		let release;
+		return BaseWatcher.lockRepository()
+			.then( () => {
 
-		return lockfile.lock( config.LOCAL_REPO, { stale: 600000, update: 30000, retries: 3 } )
-			.then( r => {
-
-				release = r;
-
-				return BaseWatcher.exec( `git fetch --all` );
+				return this.exec( `git fetch --all` );
 
 			} )
 			.then( fetch => {
 
-				console.log( fetch.code, fetch.stdout, fetch.stdout );
+				this.logger.debug( fetch.code, fetch.stdout, fetch.stdout );
 
-				return BaseWatcher.exec( `git pull ${config.REMOTE_REMOTE} dev` );
+				return this.exec( `git pull ${config.remoteRemote} dev` );
 
 			} )
 			.then( pull => {
 
-				console.log( pull.code, pull.stdout, pull.stderr );
+				this.logger.debug( pull.code, pull.stdout, pull.stderr );
 
 				// --ancestry-path
-				return BaseWatcher.exec( `git rev-list --reverse ${config.LOCAL_REMOTE}/dev..${config.REMOTE_REMOTE}/dev` );
+				return this.exec( `git rev-list --reverse ${config.localRemote}/dev..${config.remoteRemote}/dev` );
 
 			} )
 			.then( revlist => {
 
-				console.log( revlist.code, revlist.stdout, revlist.stderr );
+				this.logger.debug( revlist.code, revlist.stdout, revlist.stderr );
 
 				return Promise.mapSeries( revlist.stdout.trim().split( /\n/g ), ( line, idx, arrLen ) => {
 
@@ -74,37 +61,37 @@ class BranchWatcher extends BaseWatcher {
 
 					if ( /^[a-f0-9]{40}$/i.test( line ) !== true ) {
 
-						console.log( `${counter}: Not a valid SHA '${line}'` );
+						this.logger.debug( `${counter}: Not a valid SHA '${line}'` );
 						return;
 
 					}
 
-					return BaseWatcher.exec( `GIT_SSH_COMMAND="ssh -i ${config.IDENTITY_FILE}" git push --force --verbose ${config.LOCAL_REMOTE} ${line}:dev` )
+					return this.exec( `GIT_SSH_COMMAND="ssh -i ${config.watchers.identityFile}" git push --force --verbose ${config.localRemote} ${line}:dev` )
 						.then( push => {
 
-							console.log( `${counter}`, push.code, push.stdout, push.stderr );
+							this.logger.debug( `${counter}`, push.code, push.stdout, push.stderr );
 
 							return push;
 
 						} )
-						.catch( err => console.error( err ) );
+						.catch( err => this.logger.error( err ) );
 
 				} );
 
 			} )
 			.then( results => {
 
-				console.log( 'Push results:', results );
+				this.logger.debug( 'Push results:', results );
 
-				return release()
+				return BaseWatcher.unlockRepository()
 					.then( () => results.filter( r => r.code === 0 ).length );
 
 			} )
 			.catch( err => {
 
-				console.error( 'Branch worker failure:', err );
+				this.logger.error( 'Branch worker failure:', err );
 
-				return release();
+				return BaseWatcher.unlockRepository();
 
 			} );
 

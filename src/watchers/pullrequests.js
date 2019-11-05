@@ -2,15 +2,8 @@ const Promise = require( 'bluebird' );
 const request = Promise.promisify( require( 'request' ) );
 const BaseWatcher = require( '../BaseWatcher' );
 const Database = require( 'better-sqlite3' );
-
-
-const config = {
-	'REPOSITORY': 'mrdoob/three.js',
-	'GITHUB_TOKEN': process.env.GITHUB_TOKEN,
-	'USER_AGENT': '@3botjs',
-	'DATABASE': '/home/max/dev/3js.dev/data/watchers/trackedPRs.db',
-	'BUILDS_PATH': ''
-};
+const path = require( 'path' );
+const config = require( 'rc' )( '3jsdev' );
 
 
 const githubApiRequest = request.defaults( {
@@ -19,8 +12,8 @@ const githubApiRequest = request.defaults( {
 		'per_page': 100
 	},
 	headers: {
-		'User-Agent': config.USER_AGENT,
-		'Authorization': `token ${config.GITHUB_TOKEN}`
+		'User-Agent': config.watchers.userAgent,
+		'Authorization': `token ${process.env.GITHUB_TOKEN}`
 	},
 	timeout: 15000
 } );
@@ -29,11 +22,11 @@ class PullrequestsWatcher extends BaseWatcher {
 
 	constructor() {
 
-		super( 'pullrequestsAPIStuff', `/repos/${config.REPOSITORY}/pulls` );
+		super( 'pullrequestsAPIStuff', `/repos/${config.upstreamGithubPath}/pulls` );
 
 		this.workers = [ { name: 'savePRState', fn: this.savePRState } ];
 
-		this.db = new Database( config.DATABASE, { fileMustExist: true } );
+		this.db = new Database( path.join( config.root, config.watchers.dataPath, config.watchers.databases.live ), { fileMustExist: true } );
 		this.sqlInsertCommit = this.db.prepare( `INSERT OR REPLACE INTO commits ('sha', 'ref', 'author', 'message', 'authored_at') VALUES ( ?, ?, ?, ?, ? )` );
 		this.sqlInsertPullrequest = this.db.prepare( `INSERT OR REPLACE INTO pullrequests ('number', 'state', 'title', 'author', 'created_at', 'updated_at')
 		VALUES ( ?, ?, ?, ?, ?, ? )` );
@@ -61,7 +54,7 @@ class PullrequestsWatcher extends BaseWatcher {
 
 	async savePRState( data ) {
 
-		console.log( `State for #${data.number}: "${data.state}"` );
+		this.logger.debug( `State for #${data.number}: "${data.state}"` );
 
 		// update commits (even if nothing changed like open->closed)
 		const commits = await this._getAllCommits( data, 1 );
@@ -102,7 +95,7 @@ class PullrequestsWatcher extends BaseWatcher {
 
 		if ( apiPage > 100 ) {
 
-			console.error( 'apiPage > 100', apiPage );
+			this.logger.error( 'apiPage > 100', apiPage );
 
 			return [];
 
@@ -112,7 +105,7 @@ class PullrequestsWatcher extends BaseWatcher {
 		let etag = ( this.cache.getKey( cacheKey ) ) ? this.cache.getKey( cacheKey ).etag : 0;
 
 		const options = {
-			url: `/repos/${config.REPOSITORY}/pulls/${data.number}/commits`,
+			url: `/repos/${config.upstreamGithubPath}/pulls/${data.number}/commits`,
 			qs: {
 				page: apiPage
 			},
@@ -130,7 +123,7 @@ class PullrequestsWatcher extends BaseWatcher {
 
 		} catch ( err ) {
 
-			console.error( `Request error: ${err}` );
+			this.logger.error( `Request error: ${err}` );
 
 			return [];
 
@@ -141,13 +134,13 @@ class PullrequestsWatcher extends BaseWatcher {
 		//check if it is the same response as before and quit if it is
 		if ( etag === response.headers.etag ) {
 
-			console.log( 'no new commits, same etag' );
+			this.logger.debug( 'no new commits, same etag' );
 			return [];
 
 		} else
 			etag = response.headers.etag;
 
-		console.log( 'changes detected, new etag' );
+		this.logger.debug( 'changes detected, new etag' );
 
 		this.cache.setKey( cacheKey, { etag } );
 		this.cache.save( true );
@@ -176,21 +169,21 @@ class PullrequestsWatcher extends BaseWatcher {
 
 			if ( commits.length === 100 ) {
 
-				console.log( 'More than 100 commits on page', apiPage );
+				this.logger.debug( 'More than 100 commits on page', apiPage );
 				commits.push( ...( await this._getAllCommits( data, apiPage + 1 ) ) );
 
 			}
 
-			console.log( `Got ${commits.length} commits` );
+			this.logger.debug( `Got ${commits.length} commits` );
 
 		} else {
 
-			console.error( 'No body' );
+			this.logger.error( 'No body' );
 
 		}
 
 		// fs.writeFileSync( `events_raw_${etag}-${apiPage}.json`, JSON.stringify( events ), 'utf8' );
-		console.log( 'done, returning', commits.length, 'commits' );
+		this.logger.debug( 'done, returning', commits.length, 'commits' );
 		return commits;
 
 	}

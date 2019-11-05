@@ -1,24 +1,18 @@
 const Database = require( 'better-sqlite3' );
 const BaseWatcher = require( '../BaseWatcher' );
-
-
-const config = {
-	'REPOSITORY': 'mrdoob/three.js',
-	'GITHUB_TOKEN': process.env.GITHUB_TOKEN,
-	'USER_AGENT': '@3botjs',
-	'DATABASE': '/home/max/dev/3js.dev/data/watchers/eventslog.db'
-};
+const path = require( 'path' );
+const config = require( 'rc' )( '3jsdev' );
 
 
 class EventsWatcher extends BaseWatcher {
 
 	constructor() {
 
-		super( 'eventsLogger', `/repos/${config.REPOSITORY}/events` );
+		super( 'eventsLogger', `/repos/${config.upstreamGithubPath}/events` );
 
 		this.workers = [ { name: 'processEvent', fn: this.processEvent } ];
 
-		this.db = new Database( config.DATABASE, { fileMustExist: true } );
+		this.db = new Database( path.join( config.root, config.watchers.dataPath, config.watchers.databases.stats ), { fileMustExist: true } );
 		this.sql = {
 			event: {
 				insert: this.db.prepare( `INSERT OR IGNORE INTO events ( id, type, created_at, actor, changes ) VALUES ( $id, $type, $created_at, $actor, $changes )` )
@@ -128,10 +122,10 @@ class EventsWatcher extends BaseWatcher {
 			};
 			this.sql.event.insert.run( logData );
 
-			result = this.handlers[ event.type ]( event );
+			result = this.handlers[ event.type ].call( this, event );
 
 		} else
-			console.log( 'No handler for', event.type );
+			this.logger.debug( 'No handler for', event.type );
 
 		return result;
 
@@ -146,7 +140,7 @@ class EventsWatcher extends BaseWatcher {
 
 		if ( validActions.indexOf( action ) !== - 1 ) {
 
-			console.log( `Issue #${issue.number} was ${action}` );
+			this.logger.debug( `Issue #${issue.number} was ${action}` );
 
 
 			// always add actors, in case we didn't know of them yet
@@ -185,7 +179,7 @@ class EventsWatcher extends BaseWatcher {
 
 		} else {
 
-			console.log( `Ignoring action '${action}' on issue #${issue.number}` );
+			this.logger.debug( `Ignoring action '${action}' on issue #${issue.number}` );
 			return 0;
 
 		}
@@ -201,7 +195,7 @@ class EventsWatcher extends BaseWatcher {
 
 		if ( validActions.indexOf( action ) !== - 1 ) {
 
-			console.log( `Comment #${comment.id} on issue #${issue.number} was ${action}` );
+			this.logger.debug( `Comment #${comment.id} on issue #${issue.number} was ${action}` );
 
 
 			// always add actors, in case we didn't know of them yet
@@ -247,7 +241,7 @@ class EventsWatcher extends BaseWatcher {
 
 		} else {
 
-			console.log( `Ignoring comment #${comment.id} action '${action}' on issue #${issue.number}` );
+			this.logger.debug( `Ignoring comment #${comment.id} action '${action}' on issue #${issue.number}` );
 			return 0;
 
 		}
@@ -263,7 +257,7 @@ class EventsWatcher extends BaseWatcher {
 
 		if ( validActions.indexOf( action ) !== - 1 ) {
 
-			console.log( `Milestone #${milestone.number}(${milestone.title}) was ${action}` );
+			this.logger.debug( `Milestone #${milestone.number}(${milestone.title}) was ${action}` );
 
 
 			// always add actors, in case we didn't know of them yet
@@ -288,7 +282,7 @@ class EventsWatcher extends BaseWatcher {
 
 		} else {
 
-			console.log( `Ignoring milestone #${milestone.number} action '${action}'` );
+			this.logger.debug( `Ignoring milestone #${milestone.number} action '${action}'` );
 			return 0;
 
 		}
@@ -304,7 +298,7 @@ class EventsWatcher extends BaseWatcher {
 
 		if ( validActions.indexOf( action ) !== - 1 ) {
 
-			console.log( `PR #${pullrequest.number} was ${action}` );
+			this.logger.debug( `PR #${pullrequest.number} was ${action}` );
 
 
 			// always add actors, in case we didn't know of them yet
@@ -358,7 +352,7 @@ class EventsWatcher extends BaseWatcher {
 
 		} else {
 
-			console.log( `Ignoring action '${action}' on PR #${pullrequest.number}` );
+			this.logger.debug( `Ignoring action '${action}' on PR #${pullrequest.number}` );
 			return 0;
 
 		}
@@ -370,7 +364,7 @@ class EventsWatcher extends BaseWatcher {
 
 		const push = data.payload;
 
-		console.log( `Push ${push.push_id} with HEAD ${push.head}` );
+		this.logger.debug( `Push ${push.push_id} with HEAD ${push.head}` );
 
 
 		// convenience

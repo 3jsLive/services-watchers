@@ -1,23 +1,18 @@
 const Database = require( 'better-sqlite3' );
 const BaseWatcher = require( '../BaseWatcher' );
-
-const config = {
-	'REPOSITORY': 'mrdoob/three.js',
-	'GITHUB_TOKEN': process.env.GITHUB_TOKEN,
-	'USER_AGENT': '@3botjs',
-	'DATABASE': '/home/max/dev/3js.dev/data/watchers/eventslog.db'
-};
+const path = require( 'path' );
+const config = require( 'rc' )( '3jsdev' );
 
 
 class MilestoningWatcher extends BaseWatcher {
 
 	constructor() {
 
-		super( 'milestoningLogger', `/repos/${config.REPOSITORY}/issues/events` );
+		super( 'milestoningLogger', `/repos/${config.upstreamGithubPath}/issues/events` );
 
 		this.workers = [ { name: 'processEvent', fn: this.processEvent } ];
 
-		this.db = new Database( config.DATABASE, { fileMustExist: true } );
+		this.db = new Database( path.join( config.root, config.watchers.dataPath, config.watchers.databases.stats ), { fileMustExist: true } );
 		this.sql = {
 			issue: {
 				log: this.db.prepare( `INSERT OR REPLACE
@@ -60,11 +55,11 @@ class MilestoningWatcher extends BaseWatcher {
 
 		if ( typeof this.handlers[ event.event ] !== 'undefined' ) {
 
-			result = this.handlers[ event.event ]( event );
+			result = this.handlers[ event.event ].call( this, event );
 
 		} else {
 
-			console.log( 'No handler for', event.event );
+			this.logger.debug( 'No handler for', event.event );
 
 		}
 
@@ -75,7 +70,7 @@ class MilestoningWatcher extends BaseWatcher {
 
 	handlerMilestoned( data ) {
 
-		console.log( `Issue #${data.issue.number} was ${data.event} -> ${data.milestone.title}` );
+		this.logger.debug( `Issue #${data.issue.number} was ${data.event} -> ${data.milestone.title}` );
 
 		const input = {
 			eventId: data.id,

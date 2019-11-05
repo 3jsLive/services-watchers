@@ -1,18 +1,7 @@
 const Promise = require( 'bluebird' );
-const lockfile = require( 'proper-lockfile' );
 const BaseWatcher = require( '../BaseWatcher' );
+const config = require( 'rc' )( '3jsdev' );
 
-
-const config = {
-	'REPOSITORY': 'mrdoob/three.js',
-	'GITHUB_TOKEN': process.env.GITHUB_TOKEN,
-	'USER_AGENT': '@3botjs',
-	'LOCAL_REMOTE': '3jslive', // moraxy
-	'REMOTE_REMOTE': 'mrdoob',
-	'CACHE_DIR': '/home/max/dev/3js.dev/cache/watchers',
-	'IDENTITY_FILE': '/home/max/.ssh/id_rsa.5',
-	'LOCAL_REPO': '/home/max/dev/3js.dev/data/3jsRepository/.git'
-};
 
 /**
  * @typedef {Object} PullRequest
@@ -30,9 +19,9 @@ class PrMirrorWatcher extends BaseWatcher {
 
 	constructor() {
 
-		super( 'pullrequestsMirror', `/repos/${config.REPOSITORY}/pulls` );
+		super( 'pullrequestsMirror', `/repos/${config.upstreamGithubPath}/pulls` );
 
-		this.workers = [ { name: 'processCommits', fn: this.processCommits } ]; // FIXME: can't have 'this' in super calls yet
+		this.workers = [ { name: 'processCommits', fn: this.processCommits } ];
 
 	}
 
@@ -61,60 +50,57 @@ class PrMirrorWatcher extends BaseWatcher {
 	processCommits( pr ) {
 
 		let updates = 0;
-		let release;
 
 		// lock the git directory, otherwise we might run into problems with the branch poller
-		return lockfile.lock( config.LOCAL_REPO, { stale: 600000, update: 30000, retries: 3 } )
-			.then( r => {
-
-				release = r;
+		return BaseWatcher.lockRepository()
+			.then( () => {
 
 				// update all references
-				return BaseWatcher.exec( `git fetch --all` );
+				return this.exec( `git fetch --all` );
 
 			} )
 			.then( fetch => {
 
-				console.log( { fetch } );
+				this.logger.debug( { fetch } );
 
 				// create the new pr-branch, if it didn't exist yet, and check it out
-				return BaseWatcher.exec( `git checkout --track ${config.REMOTE_REMOTE}/pr/${pr.id}` );
+				return this.exec( `git checkout --track ${config.remoteRemote}/pr/${pr.id}` );
 
 			} )
 			.catch( err => {
 
-				console.error( 'checkout failed:', err );
+				this.logger.error( 'checkout failed: %o', err );
 
-				return 'checkout failed';
+				return err;
 
 			} )
 			.then( checkout => {
 
-				console.log( { checkout } );
+				this.logger.debug( { checkout } );
 
 				// check if the remote repo already has that pr-branch
-				return BaseWatcher.exec( `git ls-remote --heads ${config.LOCAL_REMOTE} 'refs/heads/pr/${pr.id}'` );
+				return this.exec( `git ls-remote --heads ${config.localRemote} 'refs/heads/pr/${pr.id}'` );
 
 			} )
 			.then( existingBranch => {
 
-				console.log( { existingBranch } );
+				this.logger.debug( { existingBranch } );
 
 				if ( existingBranch.stdout.trim().length === 0 ) {
 
-					console.log( 'does not exist yet on remote or error' );
+					this.logger.debug( 'does not exist yet on remote or error' );
 
 					// *** attempt to find merge-base
-					return BaseWatcher.exec( `git show-branch --merge-base pr/${pr.id} dev` )
+					return this.exec( `git show-branch --merge-base pr/${pr.id} dev` )
 						.then( mergeBase => mergeBase.stdout.trim() )
 						.then( mergeBase => {
 
-							console.log( 'merge base?', mergeBase );
+							this.logger.debug( 'merge base?', mergeBase );
 
-							return BaseWatcher.exec( `git rev-list --reverse ${mergeBase}..${config.REMOTE_REMOTE}/pr/${pr.id}` )
+							return this.exec( `git rev-list --reverse ${mergeBase}..${config.remoteRemote}/pr/${pr.id}` )
 								.then( revlist => {
 
-									console.log( { revlist } );
+									this.logger.debug( { revlist } );
 
 									// push each intermediate commit individually to trigger CI
 									let individualRevs = revlist.stdout.trim().split( /\n/g );
@@ -134,10 +120,10 @@ class PrMirrorWatcher extends BaseWatcher {
 
 					// list differences between gold-pr-branch and ours
 					// --ancestry-path
-					return BaseWatcher.exec( `git rev-list --reverse ${config.LOCAL_REMOTE}/pr/${pr.id}..${config.REMOTE_REMOTE}/pr/${pr.id}` )
+					return this.exec( `git rev-list --reverse ${config.localRemote}/pr/${pr.id}..${config.remoteRemote}/pr/${pr.id}` )
 						.then( revlist => {
 
-							console.log( { revlist } );
+							this.logger.debug( { revlist } );
 
 							// push each intermediate commit individually to trigger CI
 							let individualRevs = revlist.stdout.trim().split( /\n/g );
@@ -159,7 +145,7 @@ class PrMirrorWatcher extends BaseWatcher {
 
 					if ( /^[a-f0-9]{40}$/i.test( line ) !== true ) {
 
-						console.log( `${counter}: Not a valid SHA '${line}'` );
+						this.logger.debug( `${counter}: Not a valid SHA '${line}'` );
 						return;
 
 					}
@@ -167,18 +153,18 @@ class PrMirrorWatcher extends BaseWatcher {
 					// no dupes
 					if ( this.cache.getKey( `commit ${line}` ) ) {
 
-						console.log( `${counter}: Already processed '${line}'` );
+						this.logger.debug( `${counter}: Already processed '${line}'` );
 						return;
 
 					}
 
-					return BaseWatcher.exec( `GIT_SSH_COMMAND="ssh -i ${config.IDENTITY_FILE}" git push --force --verbose ${config.LOCAL_REMOTE} ${line}:refs/heads/pr/${pr.id}` )
+					return this.exec( `GIT_SSH_COMMAND="ssh -i ${config.watchers.identityFile}" git push --force --verbose ${config.localRemote} ${line}:refs/heads/pr/${pr.id}` )
 						.then( push => {
 
-							console.log( { push } );
+							this.logger.debug( { push } );
 
 							updates ++;
-							console.log( `${counter}: +++ ${updates}` );
+							this.logger.debug( `${counter}: +++ ${updates}` );
 
 							this.cache.setKey( `commit ${line}`, true );
 							this.cache.save( true );
@@ -192,21 +178,21 @@ class PrMirrorWatcher extends BaseWatcher {
 			} )
 			.then( result => {
 
-				console.log( { result } );
+				this.logger.debug( { result } );
 
-				return BaseWatcher.exec( `git checkout dev` )
-					.then( () => console.log( '--- updates', updates ) )
-					.then( () => release() )
+				return this.exec( `git checkout dev` )
+					.then( () => this.logger.debug( '--- updates', updates ) )
+					.then( () => BaseWatcher.unlockRepository() )
 					.then( () => updates );
 
 			} )
 			.catch( err => {
 
-				console.error( 'Something went wrong in prMirror:', err );
+				this.logger.error( 'Something went wrong in prMirror:', err );
 
-				return BaseWatcher.exec( `git checkout dev` )
-					.then( () => console.log( '--- updates', updates ) )
-					.then( () => release() )
+				return this.exec( `git checkout dev` )
+					.then( () => this.logger.debug( '--- updates', updates ) )
+					.then( () => BaseWatcher.unlockRepository() )
 					.then( () => updates );
 
 			} );
