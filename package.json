@@ -1,7 +1,8 @@
 {
-	"name": "services-watchers",
+	"name": "@3cidev/services-watchers",
 	"version": "0.8.0",
-	"description": "ci.3js.dev service workers: watcher",
+	"private": true,
+	"description": "ci.3ci.dev service workers: watcher",
 	"main": "index.js",
 	"scripts": {
 		"test": "mocha tests/"
