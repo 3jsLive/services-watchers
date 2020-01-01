@@ -29,12 +29,12 @@
 	"dependencies": {
 		"better-sqlite3": "^5.4.3",
 		"bluebird": "^3.7.1",
-		"execasync": "file:../local_modules/execasync",
 		"flat-cache": "^2.0.1",
 		"proper-lockfile": "^4.1.1",
 		"rc": "^1.2.8",
 		"request": "^2.88.0",
-		"signale": "^1.4.0"
+		"signale": "^1.4.0",
+		"shelljs": "^0.8.2"
 	},
 	"devDependencies": {
 		"@types/bluebird": "^3.5.28",
