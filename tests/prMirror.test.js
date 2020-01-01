@@ -18,7 +18,7 @@ const pr = {
 const execReturns_PrUpdate_DoesNotExistOnRemote_Success = {
 	'fetch': { code: 0, stdout: '', stderr: '' },
 	'checkout': [
-		{ code: 128, stdout: '', stderr: `fatal: Branch 'pr/${pr.id}' already exists.` },
+		{ code: 128, stdout: '', stderr: `fatal: A branch named 'pr/${pr.id}' already exists.` },
 		{ code: 0, stdout: '', stderr: `` }
 	],
 	'ls-remote': { code: 0, stdout: '', stderr: '' },
@@ -34,7 +34,7 @@ const execReturns_PrUpdate_DoesNotExistOnRemote_Success = {
 const execReturns_PrUpdate_DoesExistOnRemote_Success = {
 	'fetch': { code: 0, stdout: '', stderr: '' },
 	'checkout': [
-		{ code: 128, stdout: '', stderr: `fatal: Branch 'pr/${pr.id}' already exists.` },
+		{ code: 128, stdout: '', stderr: `fatal: A branch named 'pr/${pr.id}' already exists.` },
 		{ code: 0, stdout: '', stderr: `` }
 	],
 	'ls-remote': { code: 0, stdout: '68d6831fab24f94cd5fd3cef028c18ef6099b55b\trefs/heads/pr/12345\n', stderr: '' },
@@ -43,6 +43,17 @@ const execReturns_PrUpdate_DoesExistOnRemote_Success = {
 		stdout: 'd1813701bd93511f217aa3d77203e0ec8e1e0101\n5a519912e4f4392b5b720c34535edaf325b766c5\ne7155f214f5006dd34addee79db2c8e32e00616b\n',
 		stderr: ''
 	},
+	'push': { code: 0, stdout: '', stderr: '' }
+};
+
+const execReturns_PrUpdate_DoesExistOnRemote_Failure = {
+	'fetch': { code: 0, stdout: '', stderr: '' },
+	'checkout': [
+		{ code: 128, stdout: '', stderr: `fatal: A branch named 'pr/${pr.id}' already exists.` },
+		{ code: 0, stdout: '', stderr: `` }
+	],
+	'ls-remote': { code: 0, stdout: '68d6831fab24f94cd5fd3cef028c18ef6099b55b\trefs/heads/pr/12345\n', stderr: '' },
+	'rev-list': { code: 0, stdout: '', stderr: '' },
 	'push': { code: 0, stdout: '', stderr: '' }
 };
 
@@ -135,6 +146,16 @@ describe( `pullrequestsMirrorWatcher`, function () {
 
 			watcher.processCommits( pr )
 				.then( result => assert.equal( result, 2 ) )
+				.then( () => done() );
+
+		} );
+
+		it( 'unsuccessful worker run: PR update, remote already up-to-date', function ( done ) {
+
+			rewireExec( execReturns_PrUpdate_DoesExistOnRemote_Failure );
+
+			watcher.processCommits( pr )
+				.then( result => assert.equal( result, 0 ) )
 				.then( () => done() );
 
 		} );
