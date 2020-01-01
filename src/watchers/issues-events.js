@@ -1,7 +1,7 @@
 const Database = require( 'better-sqlite3' );
 const BaseWatcher = require( '../BaseWatcher' );
 const path = require( 'path' );
-const config = require( 'rc' )( '3jsdev' );
+const config = require( 'rc' )( '3cidev' );
 
 
 class MilestoningWatcher extends BaseWatcher {

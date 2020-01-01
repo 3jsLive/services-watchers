@@ -3,7 +3,7 @@ const request = Promise.promisify( require( 'request' ) );
 const BaseWatcher = require( '../BaseWatcher' );
 const Database = require( 'better-sqlite3' );
 const path = require( 'path' );
-const config = require( 'rc' )( '3jsdev' );
+const config = require( 'rc' )( '3cidev' );
 
 
 const githubApiRequest = request.defaults( {

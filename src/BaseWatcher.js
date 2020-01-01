@@ -4,7 +4,7 @@ const signale = require( 'signale' );
 const flatCache = require( 'flat-cache' );
 const execAsync = require( 'execasync' );
 const path = require( 'path' );
-const config = require( 'rc' )( '3jsdev' );
+const config = require( 'rc' )( '3cidev' );
 const lockfile = require( 'proper-lockfile' );
 
 
@@ -33,8 +33,7 @@ const shellOptions = {
 
 class BaseWatcher {
 
-	static release = null;
-
+	static release;
 
 	constructor( name, url ) {
 
@@ -173,7 +172,7 @@ class BaseWatcher {
 
 			}
 
-		}
+		};
 
 	}
 
@@ -187,30 +186,23 @@ class BaseWatcher {
 	}
 
 
-	static lockRepository( repoPath = path.join( config.root, config.threejsRepository, '.git' ), stale = 600000, update = 30000, retries = 3 ) {
+	static lockRepository( repoPath = path.join( config.root, config.threejsRepository, '.git' ), stale = 600000, retries = 4 ) {
 
-		// TODO: lockfile.check maybe better?
-		if ( BaseWatcher.release === null ) {
+		return lockfile.lock( repoPath, { stale: stale, retries: { retries: retries, minTimeout: stale / 2, maxTimeout: stale } } )
+			.then( release => {
 
-			return lockfile.lock( repoPath, { stale: 600000, retries: { retries: 4, minTimeout: 30000, maxTimeout: 600000 } } )
-				.then( release => {
+				BaseWatcher.release = release;
 
-					BaseWatcher.release = release;
+				return Promise.resolve( true );
 
-					return Promise.resolve( true );
+			} )
+			.catch( err => {
 
-				} )
-				.catch( err => {
+				console.error( 'Locking failed:', err );
 
-					console.error( 'Locking failed:', err );
+				return Promise.resolve( false );
 
-					return Promise.resolve( false );
-
-				} );
-
-		}
-
-		return Promise.resolve( false );
+			} );
 
 	}
 
@@ -220,8 +212,6 @@ class BaseWatcher {
 		// blind hope.
 		return BaseWatcher.release()
 			.then( () => {
-
-				BaseWatcher.release = null;
 
 				return Promise.resolve( true );
 

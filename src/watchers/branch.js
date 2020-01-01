@@ -1,6 +1,6 @@
 const Promise = require( 'bluebird' );
 const BaseWatcher = require( '../BaseWatcher' );
-const config = require( 'rc' )( '3jsdev' );
+const config = require( 'rc' )( '3cidev' );
 
 
 class BranchWatcher extends BaseWatcher {
@@ -57,7 +57,7 @@ class BranchWatcher extends BaseWatcher {
 
 				return Promise.mapSeries( revlist.stdout.trim().split( /\n/g ), ( line, idx, arrLen ) => {
 
-					const counter = `${idx}/${arrLen}`;
+					const counter = `${idx + 1}/${arrLen}`;
 
 					if ( /^[a-f0-9]{40}$/i.test( line ) !== true ) {
 

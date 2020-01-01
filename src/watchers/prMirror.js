@@ -1,6 +1,6 @@
 const Promise = require( 'bluebird' );
 const BaseWatcher = require( '../BaseWatcher' );
-const config = require( 'rc' )( '3jsdev' );
+const config = require( 'rc' )( '3cidev' );
 
 
 /**
@@ -139,7 +139,7 @@ class PrMirrorWatcher extends BaseWatcher {
 			} )
 			.then( individualRevs => {
 
-				return Promise.mapSeries( individualRevs, ( line, idx, arrLen ) => {
+				return Promise.mapSeries( individualRevs.filter( rev => rev.length === 40 ), ( line, idx, arrLen ) => {
 
 					const counter = `${idx + 1}/${arrLen}`;
 
